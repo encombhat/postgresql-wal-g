@@ -1,19 +1,24 @@
-FROM debian:buster AS builder
+FROM golang:1.12-alpine AS builder
 
-ARG WAL_URL="https://github.com/wal-g/wal-g/releases/download/v0.2.15/wal-g.linux-amd64.tar.gz"
+ARG WAL_URL="https://github.com/wal-g/wal-g.git"
+ARG WAL_VERSION=v0.2.16
 
 WORKDIR /data
+RUN apk add --no-cache wget cmake git build-base bash
+RUN git clone ${WAL_URL}
 
-RUN apt-get update
-RUN apt-get install -y wget tar
-RUN wget -O wal.tar.gz ${WAL_URL}
-RUN tar xf wal.tar.gz
-RUN chmod +x wal-g
+WORKDIR /data/wal-g
+RUN git checkout ${WAL_VERSION}
+RUN make install
+RUN make deps
+RUN make pg_build
+RUN install main/pg/wal-g /
 
-FROM postgres:12
+WORKDIR /data
+RUN /wal-g --help
 
-COPY --from=builder /data/wal-g /usr/local/bin/wal-g
-RUN apt-get update && \
-    apt-get install ca-certificates && \
-    apt-get clean
+FROM postgres:12-alpine
+
+COPY --from=builder /wal-g /usr/local/bin/wal-g
+RUN apk add --no-cache ca-certificates
 
